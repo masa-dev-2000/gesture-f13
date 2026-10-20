@@ -23,13 +23,11 @@ export const FACES = [
 
 export const FACE_BY_ID = new Map(FACES.map(face => [face.id, face]));
 
-// Sensitivity is the score an expression must reach. Lower means it reacts more easily.
-export const SENSITIVITIES = [
-  { value: 0.3, name: "とても反応しやすい" },
-  { value: 0.45, name: "反応しやすい" },
-  { value: 0.6, name: "ふつう" },
-  { value: 0.75, name: "反応しにくい" }
-];
+// Resistance -10..+10 maps to the score an expression must reach (0.25..0.95, 0 = 0.6).
+// Higher resistance needs a stronger expression.
+export const RESISTANCE_LEVELS = Array.from({ length: 21 }, (_, i) => i - 10);
+export const thresholdFor = level => Math.round((0.6 + level * 0.035) * 1000) / 1000;
+export const resistanceFor = threshold => Math.max(-10, Math.min(10, Math.round((threshold - 0.6) / 0.035)));
 
 export function blendshapeMap(categories) {
   const map = {};
