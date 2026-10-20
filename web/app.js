@@ -142,7 +142,9 @@ function recognizeFace(started, fresh) {
   }
   const result = faceLandmarker.detectForVideo(canvas, started);
   const shapes = result.faceBlendshapes?.[0] ? blendshapeMap(result.faceBlendshapes[0].categories) : null;
-  const stable = faceDetector.update(shapes, performance.now(), fresh);
+  const holdMs = Object.fromEntries(FACES.map(face =>
+    [face.id, settings.bindings.find(item => item.gesture === `F_${face.id}`)?.holdMs ?? 400]));
+  const stable = faceDetector.update(shapes, performance.now(), fresh, holdMs);
   readout.textContent = stable ? `${FACE_BY_ID.get(stable).icon} ${FACE_BY_ID.get(stable).name}` :
     shapes ? "判定中" : "検出なし";
   return stable ? `F_${stable}` : null;
@@ -263,7 +265,7 @@ function renderBindings() {
   heading.textContent = "顔の表情";
   const note = document.createElement("div");
   note.className = "shape-row idle-row";
-  note.innerHTML = '<span class="shape-icon">🙂</span><strong>ふつうの顔</strong><span class="idle-description">待機 · 0.4秒保つと入力</span>';
+  note.innerHTML = '<span class="shape-icon">🙂</span><strong>ふつうの顔</strong><span class="idle-description">待機 · 表情ごとに入力までの秒数を選べます</span>';
   group.append(heading, note);
   for (const face of FACES) group.append(bindingRow(`F_${face.id}`, face, "顔"));
   parent.append(group);
@@ -291,6 +293,19 @@ function bindingRow(id, pose, owner) {
   mode.value = binding.mode;
   mode.onchange = () => { binding.mode = mode.value; saveSettings(); };
   row.append(icon, name, key, mode);
+  if (id.startsWith("F_")) {
+    const hold = document.createElement("select");
+    hold.setAttribute("aria-label", `${owner} ${pose.name} を入力するまでの秒数`);
+    for (const ms of [200, 300, 400, 500, 600, 800, 1000, 1500, 2000]) {
+      const option = document.createElement("option");
+      option.value = ms;
+      option.textContent = `${ms / 1000}秒保つと入力`;
+      hold.append(option);
+    }
+    hold.value = binding.holdMs ?? 400;
+    hold.onchange = () => { binding.holdMs = Number(hold.value); saveSettings(); };
+    row.append(hold);
+  }
   return row;
 }
 

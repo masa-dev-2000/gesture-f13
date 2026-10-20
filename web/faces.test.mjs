@@ -43,3 +43,11 @@ test('a normal blink of both eyes is not a wink', () => {
   face.update(wink, 600, true);
   assert.equal(face.update(wink, 1000, true), 'WINK');
 });
+
+test('uses a per-expression hold time', () => {
+  const face = new StableFace();
+  const pucker = { ...neutral, mouthPucker: .9 };
+  face.update(pucker, 0, true, { PUCKER: 1000 });
+  assert.equal(face.update(pucker, 900, true, { PUCKER: 1000 }), null);
+  assert.equal(face.update(pucker, 1000, true, { PUCKER: 1000 }), 'PUCKER');
+});

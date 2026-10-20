@@ -17,7 +17,7 @@ export function blendshapeMap(categories) {
 }
 
 // Talking and blinking move the face briefly, so an expression must be held
-// above the enter threshold for holdMs. It releases below the lower exit threshold.
+// above the enter threshold for its hold time. It releases below the lower exit threshold.
 export class StableFace {
   constructor({ enter = 0.6, exit = 0.4, holdMs = 400 } = {}) {
     Object.assign(this, { enter, exit, holdMs });
@@ -30,7 +30,7 @@ export class StableFace {
     this.active = null;
   }
 
-  update(shapes, now, fresh) {
+  update(shapes, now, fresh, holdMsById = {}) {
     if (!fresh || !shapes) {
       this.reset();
       return null;
@@ -50,7 +50,7 @@ export class StableFace {
       this.candidate = best.id;
       this.since = now;
     }
-    if (now - this.since >= this.holdMs) this.active = best.id;
+    if (now - this.since >= (holdMsById[best.id] ?? this.holdMs)) this.active = best.id;
     return this.active;
   }
 }

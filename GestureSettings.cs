@@ -7,6 +7,8 @@ public sealed class GestureBinding
     public string Gesture { get; set; } = "";
     public string Keys { get; set; } = "";
     public string Mode { get; set; } = "tap";
+    // Face expressions only: how long the expression must be held before input.
+    public int HoldMs { get; set; } = 400;
 }
 
 public sealed class GestureSettings
@@ -107,6 +109,8 @@ public sealed class GestureSettings
         {
             if (binding.Mode is not ("tap" or "hold"))
                 throw new InvalidDataException($"{binding.Gesture} の入力方式が正しくありません。");
+            if (binding.HoldMs is < 100 or > 5000)
+                throw new InvalidDataException($"{binding.Gesture} の入力までの秒数が正しくありません。");
             ShortcutKeys.Parse(binding.Keys);
         }
     }
