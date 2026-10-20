@@ -23,11 +23,10 @@ export const FACES = [
 
 export const FACE_BY_ID = new Map(FACES.map(face => [face.id, face]));
 
-// Resistance -10..+10 maps to the score an expression must reach (0.25..0.95, 0 = 0.6).
-// Higher resistance needs a stronger expression.
-export const RESISTANCE_LEVELS = Array.from({ length: 21 }, (_, i) => i - 10);
-export const thresholdFor = level => Math.round((0.6 + level * 0.035) * 1000) / 1000;
-export const resistanceFor = threshold => Math.max(-10, Math.min(10, Math.round((threshold - 0.6) / 0.035)));
+// Resistance 0..100 is the expression strength (%) needed to react. 0 is treated as 1
+// so a neutral face never triggers.
+export const thresholdFor = resistance => Math.max(1, Math.min(100, Math.round(resistance))) / 100;
+export const resistanceFor = threshold => Math.round(threshold * 100);
 
 export function blendshapeMap(categories) {
   const map = {};

@@ -79,8 +79,8 @@ test('head direction scores follow the nose position', () => {
 
 test('resistance levels map to thresholds and back', async () => {
   const { thresholdFor, resistanceFor } = await import('./faces.mjs');
-  assert.equal(thresholdFor(0), .6);
-  assert.equal(thresholdFor(-10), .25);
-  assert.equal(thresholdFor(10), .95);
-  for (let level = -10; level <= 10; level++) assert.equal(resistanceFor(thresholdFor(level)), level);
+  assert.equal(thresholdFor(60), .6);
+  assert.equal(thresholdFor(0), .01);
+  assert.equal(thresholdFor(150), 1);
+  for (let level = 1; level <= 100; level++) assert.equal(resistanceFor(thresholdFor(level)), level);
 });

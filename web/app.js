@@ -1,5 +1,5 @@
 import { FaceLandmarker, FilesetResolver, GestureRecognizer } from "./vendor/vision_bundle.mjs";
-import { FACES, FACE_BY_ID, HeadDirection, RESISTANCE_LEVELS, StableFace, resistanceFor, thresholdFor, blendshapeMap } from "./faces.mjs";
+import { FACES, FACE_BY_ID, HeadDirection, StableFace, resistanceFor, thresholdFor, blendshapeMap } from "./faces.mjs";
 import { POSES, POSE_BY_MODEL, StablePose } from "./poses.mjs";
 
 const $ = id => document.getElementById(id);
@@ -278,7 +278,7 @@ function renderBindings() {
   group.className = "panel shape-group face-group";
   const note = document.createElement("p");
   note.className = "face-note";
-  note.textContent = "ふつうの顔は待機です。バーが右端に届いた表情を、選んだ秒数だけ保つと入力します。届かない表情は「反応しにくさ」をマイナスに、誤作動する表情はプラスにしてください。";
+  note.textContent = "ふつうの顔は待機です。バーが右端に届いた表情を、選んだ秒数だけ保つと入力します。反応しにくさは0〜100（標準60）。届かない表情は小さく、誤作動する表情は大きくしてください。";
   group.append(heading, note);
   for (const face of FACES) group.append(faceRow(`F_${face.id}`, face));
   parent.append(group);
@@ -309,18 +309,26 @@ function bindingRow(id, pose, owner) {
   return row;
 }
 
-function choice(labelText, options, value, onchange) {
-  const select = document.createElement("select");
-  select.setAttribute("aria-label", labelText);
-  for (const [optionValue, text] of options) {
-    const option = document.createElement("option");
-    option.value = optionValue;
-    option.textContent = text;
-    select.append(option);
-  }
-  select.value = value;
-  select.onchange = () => onchange(select.value);
-  return select;
+// Out-of-range input snaps to the nearest allowed value; saving happens when the field is committed.
+function numberField(labelText, unit, min, max, step, value, apply) {
+  const wrap = document.createElement("label");
+  wrap.className = "number-field";
+  const input = document.createElement("input");
+  Object.assign(input, { type: "number", min, max, step, value });
+  input.setAttribute("aria-label", labelText);
+  input.onchange = () => {
+    const parsed = Number(input.value);
+    const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : value;
+    input.value = clamped;
+    value = clamped;
+    apply(clamped);
+    saveSettings();
+  };
+  const text = document.createElement("span");
+  text.textContent = unit;
+  if (unit === "反応しにくさ") wrap.append(text, input);
+  else wrap.append(input, text);
+  return wrap;
 }
 
 function faceRow(id, face) {
@@ -331,13 +339,10 @@ function faceRow(id, face) {
   meter.className = "face-meter";
   meter.dataset.faceMeter = face.id;
   meter.title = "今の表情の強さ";
-  const hold = choice(`${face.name} を入力するまでの秒数`,
-    [200, 300, 400, 500, 600, 800, 1000, 1500, 2000].map(ms => [ms, `${ms / 1000}秒保つ`]),
-    binding.holdMs ?? 400, value => { binding.holdMs = Number(value); saveSettings(); });
-  const sensitivity = choice(`${face.name} の反応しにくさ`,
-    RESISTANCE_LEVELS.map(level => [level, `反応しにくさ ${level > 0 ? "+" : ""}${level}${
-      level === -10 ? "（最も敏感）" : level === 0 ? "（標準）" : level === 10 ? "（最も鈍い）" : ""}`]),
-    resistanceFor(binding.threshold ?? 0.6), value => { binding.threshold = thresholdFor(Number(value)); saveSettings(); });
+  const hold = numberField(`${face.name} を入力するまでの秒数`, "秒保つ", 0.1, 5, 0.1,
+    (binding.holdMs ?? 400) / 1000, value => { binding.holdMs = Math.round(value * 1000); });
+  const sensitivity = numberField(`${face.name} の反応しにくさ（0〜100）`, "反応しにくさ", 0, 100, 1,
+    resistanceFor(binding.threshold ?? 0.6), value => { binding.threshold = thresholdFor(value); });
   row.append(meter, hold, sensitivity);
   return row;
 }

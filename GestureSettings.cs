@@ -114,7 +114,7 @@ public sealed class GestureSettings
                 throw new InvalidDataException($"{binding.Gesture} の入力方式が正しくありません。");
             if (binding.HoldMs is < 100 or > 5000)
                 throw new InvalidDataException($"{binding.Gesture} の入力までの秒数が正しくありません。");
-            if (binding.Threshold is < 0.1 or > 1)
+            if (binding.Threshold is < 0.01 or > 1)
                 throw new InvalidDataException($"{binding.Gesture} の反応しやすさが正しくありません。");
             ShortcutKeys.Parse(binding.Keys);
         }
