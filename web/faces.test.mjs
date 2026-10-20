@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { FACES, StableFace, blendshapeMap } from './faces.mjs';
+import { FACES, HeadDirection, StableFace, blendshapeMap } from './faces.mjs';
 
 const neutral = { jawOpen: 0, mouthSmileLeft: 0, mouthSmileRight: 0, browInnerUp: 0, mouthPucker: 0, eyeBlinkLeft: 0, eyeBlinkRight: 0 };
 
-test('five face expressions have distinct ids', () => {
-  assert.equal(new Set(FACES.map(f => f.id)).size, 5);
+test('fourteen face expressions have distinct ids', () => {
+  assert.equal(new Set(FACES.map(f => f.id)).size, 14);
 });
 
 test('maps blendshape categories by name', () => {
@@ -50,4 +50,29 @@ test('uses a per-expression hold time', () => {
   face.update(pucker, 0, true, { PUCKER: 1000 });
   assert.equal(face.update(pucker, 900, true, { PUCKER: 1000 }), null);
   assert.equal(face.update(pucker, 1000, true, { PUCKER: 1000 }), 'PUCKER');
+});
+
+test('similar expressions that score close together do not trigger', () => {
+  const face = new StableFace();
+  const mixed = { ...neutral, jawOpen: .7, mouthPucker: .65 };
+  face.update(mixed, 0, true);
+  assert.equal(face.update(mixed, 1000, true), null);
+});
+
+test('a lower sensitivity value lets a weak expression trigger', () => {
+  const face = new StableFace();
+  const weak = { ...neutral, jawOpen: .35 };
+  face.update(weak, 0, true);
+  assert.equal(face.update(weak, 500, true), null);
+  face.update(weak, 600, true, {}, { MOUTH_OPEN: .3 });
+  assert.equal(face.update(weak, 1000, true, {}, { MOUTH_OPEN: .3 }), 'MOUTH_OPEN');
+});
+
+test('head direction scores follow the nose position', () => {
+  const head = new HeadDirection();
+  const points = nx => Object.assign([], { 1: { x: nx, y: .5 }, 234: { x: .3, y: .5 }, 454: { x: .7, y: .5 },
+    152: { x: .5, y: .8 }, 33: { x: .4, y: .4 }, 263: { x: .6, y: .4 } });
+  assert.equal(head.scores(points(.5), true).headLeft, 0);
+  assert.ok(head.scores(points(.38), false).headLeft > .9);
+  assert.ok(head.scores(points(.62), false).headRight > .9);
 });

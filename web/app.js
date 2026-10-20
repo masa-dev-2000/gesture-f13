@@ -1,5 +1,5 @@
 import { FaceLandmarker, FilesetResolver, GestureRecognizer } from "./vendor/vision_bundle.mjs";
-import { FACES, FACE_BY_ID, StableFace, blendshapeMap } from "./faces.mjs";
+import { FACES, FACE_BY_ID, HeadDirection, SENSITIVITIES, StableFace, blendshapeMap } from "./faces.mjs";
 import { POSES, POSE_BY_MODEL, StablePose } from "./poses.mjs";
 
 const $ = id => document.getElementById(id);
@@ -15,6 +15,7 @@ const keySearchTerms = { ENTER: "エンター 決定 改行", CTRL: "コント�
 const modifierOrder = ["CTRL", "SHIFT", "ALT", "WIN"];
 const detectors = { Left: new StablePose(), Right: new StablePose() };
 const faceDetector = new StableFace();
+const headDirection = new HeadDirection();
 
 let settings;
 let recognizer;
@@ -59,6 +60,7 @@ function resetRecognition() {
   detectors.Left.reset();
   detectors.Right.reset();
   faceDetector.reset();
+  headDirection.reset();
   $("face-pose").textContent = settings?.faceEnabled ? "検出なし" : "オフ";
   $("left-pose").textContent = "検出なし";
   $("right-pose").textContent = "検出なし";
@@ -141,10 +143,20 @@ function recognizeFace(started, fresh) {
     return null;
   }
   const result = faceLandmarker.detectForVideo(canvas, started);
-  const shapes = result.faceBlendshapes?.[0] ? blendshapeMap(result.faceBlendshapes[0].categories) : null;
-  const holdMs = Object.fromEntries(FACES.map(face =>
-    [face.id, settings.bindings.find(item => item.gesture === `F_${face.id}`)?.holdMs ?? 400]));
-  const stable = faceDetector.update(shapes, performance.now(), fresh, holdMs);
+  const shapes = result.faceBlendshapes?.[0] ? {
+    ...blendshapeMap(result.faceBlendshapes[0].categories),
+    ...headDirection.scores(result.faceLandmarks?.[0], !faceDetector.active && !faceDetector.candidate)
+  } : null;
+  const faceBinding = face => settings.bindings.find(item => item.gesture === `F_${face.id}`);
+  const holdMs = Object.fromEntries(FACES.map(face => [face.id, faceBinding(face)?.holdMs ?? 400]));
+  const enter = Object.fromEntries(FACES.map(face => [face.id, faceBinding(face)?.threshold ?? 0.6]));
+  const stable = faceDetector.update(shapes, performance.now(), fresh, holdMs, enter);
+  for (const meter of document.querySelectorAll("[data-face-meter]")) {
+    const face = FACE_BY_ID.get(meter.dataset.faceMeter);
+    const level = shapes ? Math.min(1, (face.score(shapes) ?? 0) / enter[face.id]) : 0;
+    meter.style.setProperty("--level", level);
+    meter.classList.toggle("over", level >= 1);
+  }
   readout.textContent = stable ? `${FACE_BY_ID.get(stable).icon} ${FACE_BY_ID.get(stable).name}` :
     shapes ? "判定中" : "検出なし";
   return stable ? `F_${stable}` : null;
@@ -263,11 +275,12 @@ function renderBindings() {
   group.className = "panel shape-group";
   const heading = document.createElement("h2");
   heading.textContent = "顔の表情";
-  const note = document.createElement("div");
-  note.className = "shape-row idle-row";
-  note.innerHTML = '<span class="shape-icon">🙂</span><strong>ふつうの顔</strong><span class="idle-description">待機 · 表情ごとに入力までの秒数を選べます</span>';
+  group.className = "panel shape-group face-group";
+  const note = document.createElement("p");
+  note.className = "face-note";
+  note.textContent = "ふつうの顔は待機です。バーが右端に届いた表情を、選んだ秒数だけ保つと入力します。届かない表情は「反応しやすい」側にしてください。";
   group.append(heading, note);
-  for (const face of FACES) group.append(bindingRow(`F_${face.id}`, face, "顔"));
+  for (const face of FACES) group.append(faceRow(`F_${face.id}`, face));
   parent.append(group);
 }
 
@@ -293,19 +306,38 @@ function bindingRow(id, pose, owner) {
   mode.value = binding.mode;
   mode.onchange = () => { binding.mode = mode.value; saveSettings(); };
   row.append(icon, name, key, mode);
-  if (id.startsWith("F_")) {
-    const hold = document.createElement("select");
-    hold.setAttribute("aria-label", `${owner} ${pose.name} を入力するまでの秒数`);
-    for (const ms of [200, 300, 400, 500, 600, 800, 1000, 1500, 2000]) {
-      const option = document.createElement("option");
-      option.value = ms;
-      option.textContent = `${ms / 1000}秒保つと入力`;
-      hold.append(option);
-    }
-    hold.value = binding.holdMs ?? 400;
-    hold.onchange = () => { binding.holdMs = Number(hold.value); saveSettings(); };
-    row.append(hold);
+  return row;
+}
+
+function choice(labelText, options, value, onchange) {
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", labelText);
+  for (const [optionValue, text] of options) {
+    const option = document.createElement("option");
+    option.value = optionValue;
+    option.textContent = text;
+    select.append(option);
   }
+  select.value = value;
+  select.onchange = () => onchange(select.value);
+  return select;
+}
+
+function faceRow(id, face) {
+  const row = bindingRow(id, face, "顔");
+  const binding = settings.bindings.find(item => item.gesture === id);
+  row.classList.add("face-row");
+  const meter = document.createElement("span");
+  meter.className = "face-meter";
+  meter.dataset.faceMeter = face.id;
+  meter.title = "今の表情の強さ";
+  const hold = choice(`${face.name} を入力するまでの秒数`,
+    [200, 300, 400, 500, 600, 800, 1000, 1500, 2000].map(ms => [ms, `${ms / 1000}秒保つ`]),
+    binding.holdMs ?? 400, value => { binding.holdMs = Number(value); saveSettings(); });
+  const sensitivity = choice(`${face.name} の反応しやすさ`,
+    SENSITIVITIES.map(item => [item.value, item.name]),
+    binding.threshold ?? 0.6, value => { binding.threshold = Number(value); saveSettings(); });
+  row.append(meter, hold, sensitivity);
   return row;
 }
 
