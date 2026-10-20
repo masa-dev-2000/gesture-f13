@@ -1,0 +1,10 @@
+bin/
+obj/
+web/node_modules/
+*.user
+.venv/
+__pycache__/
+/gesture_recognizer.task
+publish/
+publish-next/
+SESSION_HANDOFF.md
