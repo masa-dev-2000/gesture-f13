@@ -59,6 +59,11 @@
         <p>メイン画面の「左手」「右手」を見て、実際の手と異なる場合だけ変更してください。</p>
         <label><input id="face-enabled" type="checkbox"> 顔の表情でも入力する</label>
         <p>話す・まばたきなどの短い動きでは入力しません。表情を一定時間保つと入力します。秒数と反応しにくさ（0〜100）は表情ごとに数値で入力できます。オンにすると認識処理が重くなります。</p>
+        <div class="face-center-row">
+          <button id="face-center" type="button" class="secondary">今の顔の向きを正面にする</button>
+          <label class="number-field">左右の正面のずれ <input id="face-yaw-center" type="number" min="-40" max="40" step="1" value="0"></label>
+        </div>
+        <p>カメラが正面からずれていると、まっすぐ見ても顔が横を向いていると判定されます。画面を普段どおり見たまま「今の顔の向きを正面にする」を押してください。ずれは数値でも調整できます（マイナスは左、プラスは右）。上下は普段の角度を自動で覚えます。</p>
       </section>
     </main>
   </div>

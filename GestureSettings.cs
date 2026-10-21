@@ -18,6 +18,8 @@ public sealed class GestureSettings
     public int Version { get; set; } = 3;
     public bool SwapHands { get; set; } = true;
     public bool FaceEnabled { get; set; }
+    // Nose offset (-0.4..0.4) that counts as facing front when the camera is off-center.
+    public double FaceYawCenter { get; set; }
     public List<GestureBinding> Bindings { get; set; } = Defaults();
 
     public static readonly string[] GestureIds =
@@ -108,6 +110,8 @@ public sealed class GestureSettings
             Bindings.Select(b => b.Gesture).Distinct(StringComparer.Ordinal).Count() != GestureIds.Length ||
             !GestureIds.All(id => Bindings.Any(b => b.Gesture == id)))
             throw new InvalidDataException("ジェスチャー設定の形式が正しくありません。");
+        if (FaceYawCenter is < -0.4 or > 0.4)
+            throw new InvalidDataException("顔の正面のずれが正しくありません。");
         foreach (var binding in Bindings)
         {
             if (binding.Mode is not ("tap" or "hold"))

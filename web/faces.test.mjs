@@ -76,6 +76,9 @@ test('head direction scores follow the nose position', () => {
   assert.ok(head.scores(points(.45), false).headLeft < .5);
   assert.ok(head.scores(points(.32), false).headLeft > .9);
   assert.ok(head.scores(points(.68), false).headRight > .9);
+  const offCamera = new HeadDirection();
+  assert.equal(offCamera.scores(points(.6), true, .25).headRight, 0);
+  assert.ok(offCamera.scores(points(.32), false, .25).headLeft > .9);
 });
 
 test('resistance levels map to thresholds and back', async () => {

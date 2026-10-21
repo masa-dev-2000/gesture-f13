@@ -145,7 +145,8 @@ function recognizeFace(started, fresh) {
   const result = faceLandmarker.detectForVideo(canvas, started);
   const shapes = result.faceBlendshapes?.[0] ? {
     ...blendshapeMap(result.faceBlendshapes[0].categories),
-    ...headDirection.scores(result.faceLandmarks?.[0], !faceDetector.active && !faceDetector.candidate)
+    ...headDirection.scores(result.faceLandmarks?.[0], !faceDetector.active && !faceDetector.candidate,
+      settings.faceYawCenter ?? 0)
   } : null;
   const faceBinding = face => settings.bindings.find(item => item.gesture === `F_${face.id}`);
   const holdMs = Object.fromEntries(FACES.map(face => [face.id, faceBinding(face)?.holdMs ?? 400]));
@@ -407,6 +408,23 @@ $("swap-hands").onchange = () => {
   resetRecognition();
   saveSettings();
 };
+$("face-center").onclick = () => {
+  if (!faceLandmarker || $("face-pose").textContent === "検出なし") {
+    announce("顔が映っていないため、正面を設定できません。");
+    return;
+  }
+  settings.faceYawCenter = Math.round(headDirection.lastYaw * 1000) / 1000;
+  headDirection.reset();
+  $("face-yaw-center").value = Math.round(settings.faceYawCenter * 100);
+  saveSettings();
+  announce("今の顔の向きを正面にしました。");
+};
+$("face-yaw-center").onchange = () => {
+  const value = Math.max(-40, Math.min(40, Math.round(Number($("face-yaw-center").value) || 0)));
+  $("face-yaw-center").value = value;
+  settings.faceYawCenter = value / 100;
+  saveSettings();
+};
 $("face-enabled").onchange = async () => {
   settings.faceEnabled = $("face-enabled").checked;
   resetRecognition();
@@ -434,6 +452,7 @@ window.chrome.webview.addEventListener("message", event => {
     settings = data.settings;
     $("swap-hands").checked = settings.swapHands;
     $("face-enabled").checked = settings.faceEnabled;
+    $("face-yaw-center").value = Math.round((settings.faceYawCenter ?? 0) * 100);
     renderBindings();
   }
   const wasPaused = paused;

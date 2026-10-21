@@ -37,17 +37,23 @@ export function blendshapeMap(categories) {
 const clamp01 = value => Math.max(0, Math.min(1, value));
 
 // Nose position between the cheeks (yaw) and between eye line and chin (pitch).
-// Pitch has no fixed neutral value per person, so it is compared to a slow baseline.
+// Yaw is measured from a user-set front direction, because an off-center camera makes
+// a straight face look turned. Pitch has no fixed neutral value per person, so it is
+// compared to a slow baseline.
 export class HeadDirection {
-  constructor() { this.pitchBaseline = null; }
+  constructor() {
+    this.pitchBaseline = null;
+    this.lastYaw = 0;
+  }
 
   reset() { this.pitchBaseline = null; }
 
-  scores(landmarks, settle) {
+  scores(landmarks, settle, yawCenter = 0) {
     if (!landmarks?.length) return {};
     const nose = landmarks[1], left = landmarks[234], right = landmarks[454], chin = landmarks[152];
     const eyeY = (landmarks[33].y + landmarks[263].y) / 2;
-    const yaw = (nose.x - left.x) / (right.x - left.x) - 0.5;
+    this.lastYaw = (nose.x - left.x) / (right.x - left.x) - 0.5;
+    const yaw = this.lastYaw - yawCenter;
     const pitch = (nose.y - eyeY) / (chin.y - eyeY);
     this.pitchBaseline ??= pitch;
     if (settle) this.pitchBaseline += (pitch - this.pitchBaseline) * 0.02;
