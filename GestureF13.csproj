@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="web\index.html;web\app.js;web\poses.mjs;web\faces.mjs;web\face_landmarker.task;web\style.css;web\gesture_recognizer.task;web\vendor\vision_bundle.mjs;web\vendor\wasm\**\*">
+    <Content Include="web\index.html;web\app.js;web\poses.mjs;web\sequence.mjs;web\faces.mjs;web\face_landmarker.task;web\style.css;web\gesture_recognizer.task;web\vendor\vision_bundle.mjs;web\vendor\wasm\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

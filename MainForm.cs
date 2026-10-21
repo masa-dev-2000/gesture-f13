@@ -10,6 +10,7 @@ public sealed class MainForm : Form
     private readonly WebView2 view = new() { Dock = DockStyle.Fill };
     private readonly System.Windows.Forms.Timer watchdog = new() { Interval = 25 };
     private readonly ShortcutOutput output = new();
+    private readonly SequenceRunner runner;
     private readonly HashSet<string> lastActive = [];
     private readonly Dictionary<string, long> lastTap = new();
     private GestureSettings settings;
@@ -27,6 +28,7 @@ public sealed class MainForm : Form
             settings = new GestureSettings();
             startupWarning = $"設定を読み込めませんでした: {ex.Message}";
         }
+        runner = new SequenceRunner(output, message => PublishState(message));
         Text = "Gesture Shortcut";
         ClientSize = new Size(1120, 780);
         MinimumSize = new Size(780, 580);
@@ -177,24 +179,24 @@ public sealed class MainForm : Form
         foreach (string id in events.Concat(active.Where(id => !lastActive.Contains(id))))
         {
             var binding = settings.Binding(id);
-            if (binding.Mode != "tap" || string.IsNullOrEmpty(binding.Keys)) continue;
+            if (binding.Mode != "tap" || binding.Steps.Count == 0 || runner.IsRunning(id)) continue;
             long now = Environment.TickCount64;
             if (lastTap.TryGetValue(id, out long previous) && now - previous < 300) continue;
             lastTap[id] = now;
-            if (TryOutput(() => output.Tap(ShortcutKeys.Parse(binding.Keys))))
-            {
-                lastOutput = $"{id} → {binding.Keys}（1回）";
-                PublishState();
-            }
+            runner.Start(id, binding.Steps);
+            lastOutput = binding.CanHold ? $"{id} → {binding.Steps[0].Keys}（1回）" :
+                $"{id} → 連続操作（{binding.Steps.Count}手順）";
+            PublishState();
         }
         foreach (string id in GestureSettings.GestureIds)
         {
             var binding = settings.Binding(id);
-            if (binding.Mode == "hold" && active.Contains(id))
+            if (binding.Mode == "hold" && binding.CanHold && active.Contains(id))
             {
-                if (TryOutput(() => output.SetHold(id, ShortcutKeys.Parse(binding.Keys), true)) &&
-                    !lastActive.Contains(id) && !string.IsNullOrEmpty(binding.Keys))
-                    lastOutput = $"{id} → {binding.Keys}（長押し）";
+                string keys = binding.Steps[0].Keys!;
+                if (TryOutput(() => output.SetHold(id, ShortcutKeys.Parse(keys), true)) &&
+                    !lastActive.Contains(id))
+                    lastOutput = $"{id} → {keys}（長押し）";
             }
         }
         lastActive.Clear();
@@ -210,6 +212,7 @@ public sealed class MainForm : Form
 
     public void EmergencyRelease(string? reason = null)
     {
+        runner.CancelAll();
         lastActive.Clear();
         TryOutput(() => output.ReleaseAll());
         if (reason is not null) PublishState(reason);

@@ -76,6 +76,38 @@ internal static class ShortcutKeys
     [DllImport("user32.dll")]
     private static extern uint MapVirtualKey(uint code, uint mapType);
 
+    private const uint Unicode = 4;
+
+    // Text goes out as Unicode key events, so IME conversion is bypassed and Japanese
+    // arrives as written. Newline and tab are sent as real Enter/Tab keys.
+    public static void SendText(string text)
+    {
+        var inputs = new List<Input>();
+        void Add(ushort vk, ushort scan, uint flags) => inputs.Add(new Input
+        {
+            Type = Keyboard,
+            Data = new InputUnion { Key = new KeyInput { VirtualKey = vk, Scan = scan, Flags = flags } }
+        });
+        foreach (char c in text.Replace("\r\n", "\n").Replace('\r', '\n'))
+        {
+            if (c is '\n' or '\t')
+            {
+                ushort vk = c == '\n' ? (ushort)0x0D : (ushort)0x09;
+                ushort scan = (ushort)MapVirtualKey(vk, 0);
+                Add(vk, scan, 0);
+                Add(vk, scan, KeyUp);
+            }
+            else
+            {
+                Add(0, c, Unicode);
+                Add(0, c, Unicode | KeyUp);
+            }
+        }
+        if (inputs.Count == 0) return;
+        if (SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<Input>()) != inputs.Count)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+
     public static void Send(ushort key, bool down)
     {
         var input = new Input

@@ -1,6 +1,6 @@
 ; Build: dotnet publish -c Release -r win-x64 --self-contained false -o <AppDir>
 ;        ISCC.exe /DAppDir=<AppDir> /DOutDir=<OutDir> installer.iss
-#define AppVersion "1.1.0"
+#define AppVersion "1.2.0"
 
 [Setup]
 AppId={{6B1E0F5A-2C4D-4E8B-9A57-3F0C1D2E4B61}

@@ -1,6 +1,7 @@
 import { FaceLandmarker, FilesetResolver, GestureRecognizer } from "./vendor/vision_bundle.mjs";
 import { FACES, FACE_BY_ID, HeadDirection, StableFace, resistanceFor, thresholdFor, blendshapeMap } from "./faces.mjs";
 import { POSES, POSE_BY_MODEL, StablePose } from "./poses.mjs";
+import { MAX_STEPS, MAX_TEXT, MAX_WAIT_MS, canHold, describeStep, moveStep, summarize } from "./sequence.mjs";
 
 const $ = id => document.getElementById(id);
 const video = $("camera");
@@ -29,8 +30,11 @@ let runId = 0;
 let lastVideoTime = -1;
 let lastFrameAt = 0;
 let previousActive = new Set();
-let selectedBinding;
 let pickerKeys = [];
+let pickerDone;
+let sequenceBinding;
+let draftSteps = [];
+let selectedStep = -1;
 let dirty = false;
 let saveRevision = 0;
 
@@ -298,20 +302,26 @@ function bindingRow(id, pose, owner) {
   const key = document.createElement("button");
   key.type = "button";
   key.className = "secondary key-choice";
-  key.textContent = binding.keys || "キーを割り当てる";
-  key.setAttribute("aria-label", `${owner} ${pose.name} のキー`);
-  key.onclick = () => openPicker(id);
+  key.textContent = summarize(binding.steps, keyLabel);
+  key.title = key.textContent;
+  key.setAttribute("aria-label", `${owner} ${pose.name} の操作`);
+  key.onclick = () => openSequence(id, `${owner} ${pose.name}`);
   const mode = document.createElement("select");
   mode.setAttribute("aria-label", `${owner} ${pose.name} の入力方式`);
   mode.innerHTML = '<option value="tap">認識した時に1回押し</option><option value="hold">認識中は長押し</option>';
   mode.value = binding.mode;
+  if (!canHold(binding.steps)) {
+    mode.value = "tap";
+    mode.disabled = true;
+    mode.title = "長押しは、手順がショートカット1つのときだけ選べます";
+  }
   mode.onchange = () => { binding.mode = mode.value; saveSettings(); };
   row.append(icon, name, key, mode);
   return row;
 }
 
 // Out-of-range input snaps to the nearest allowed value; saving happens when the field is committed.
-function numberField(labelText, unit, min, max, step, value, apply) {
+function numberField(labelText, unit, min, max, step, value, apply, autosave = true) {
   const wrap = document.createElement("label");
   wrap.className = "number-field";
   const input = document.createElement("input");
@@ -323,7 +333,7 @@ function numberField(labelText, unit, min, max, step, value, apply) {
     input.value = clamped;
     value = clamped;
     apply(clamped);
-    saveSettings();
+    if (autosave) saveSettings();
   };
   const text = document.createElement("span");
   text.textContent = unit;
@@ -379,9 +389,9 @@ function renderPicker() {
   }
 }
 
-function openPicker(id) {
-  selectedBinding = settings.bindings.find(binding => binding.gesture === id);
-  pickerKeys = selectedBinding.keys ? selectedBinding.keys.split("+") : [];
+function openPicker(keys, done) {
+  pickerKeys = keys ? keys.split("+") : [];
+  pickerDone = done;
   $("key-search").value = "";
   renderPicker();
   $("key-picker").showModal();
@@ -389,9 +399,106 @@ function openPicker(id) {
 }
 
 function commitPicker() {
-  selectedBinding.keys = [...modifierOrder.filter(key => pickerKeys.includes(key)),
+  const keys = [...modifierOrder.filter(key => pickerKeys.includes(key)),
     ...pickerKeys.filter(key => !modifierOrder.includes(key))].join("+");
   $("key-picker").close();
+  if (keys) pickerDone?.(keys);
+}
+
+const keyLabel = key => keyLabels[key] || key;
+
+function openSequence(id, title) {
+  sequenceBinding = settings.bindings.find(binding => binding.gesture === id);
+  draftSteps = structuredClone(sequenceBinding.steps);
+  selectedStep = -1;
+  $("sequence-title").textContent = `${title} の操作`;
+  renderSequence();
+  $("sequence-editor").showModal();
+}
+
+function renderSequence() {
+  const list = $("sequence-steps");
+  list.replaceChildren();
+  if (!draftSteps.length) {
+    const empty = document.createElement("li");
+    empty.className = "step-empty";
+    empty.textContent = "手順がありません。下のボタンで追加してください。";
+    list.append(empty);
+  }
+  const kinds = { shortcut: "ショートカット", text: "文字入力", wait: "待機" };
+  draftSteps.forEach((step, index) => {
+    const item = document.createElement("li");
+    item.className = `step-item ${index === selectedStep ? "selected" : ""}`;
+    const head = document.createElement("div");
+    head.className = "step-head";
+    const label = document.createElement("button");
+    label.type = "button";
+    label.className = "step-label";
+    label.textContent = `${index + 1}. ${kinds[step.kind]}  ${describeStep(step, keyLabel)}`;
+    label.onclick = () => {
+      if (step.kind === "shortcut") openPicker(step.keys, keys => { step.keys = keys; renderSequence(); });
+      else { selectedStep = selectedStep === index ? -1 : index; renderSequence(); }
+    };
+    const tools = document.createElement("span");
+    tools.className = "step-tools";
+    for (const [text, name, action] of [
+      ["↑", "上へ", () => { draftSteps = moveStep(draftSteps, index, index - 1); selectedStep = -1; }],
+      ["↓", "下へ", () => { draftSteps = moveStep(draftSteps, index, index + 1); selectedStep = -1; }],
+      ["⧉", "複製", () => { if (draftSteps.length < MAX_STEPS) draftSteps.splice(index + 1, 0, structuredClone(step)); }],
+      ["✕", "削除", () => { draftSteps.splice(index, 1); selectedStep = -1; }]
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary step-tool";
+      button.textContent = text;
+      button.title = name;
+      button.setAttribute("aria-label", `${index + 1}番目を${name}`);
+      button.onclick = () => { action(); renderSequence(); };
+      tools.append(button);
+    }
+    head.append(label, tools);
+    item.append(head);
+    if (index === selectedStep && step.kind === "text") {
+      const area = document.createElement("textarea");
+      area.maxLength = MAX_TEXT;
+      area.rows = 3;
+      area.value = step.text;
+      area.setAttribute("aria-label", "入力する文字");
+      area.oninput = () => {
+        step.text = area.value;
+        label.textContent = `${index + 1}. 文字入力  ${describeStep(step)}`;
+        updateSequenceStatus();
+      };
+      item.append(area);
+      setTimeout(() => area.focus(), 0);
+    } else if (index === selectedStep && step.kind === "wait") {
+      item.append(numberField("待つ秒数", "秒待つ", 0, MAX_WAIT_MS / 1000, 0.1, step.ms / 1000,
+        value => { step.ms = Math.round(value * 1000); renderSequence(); }, false));
+    }
+    list.append(item);
+  });
+  $("sequence-count").textContent = `${draftSteps.length} / ${MAX_STEPS} 手順`;
+  for (const id of ["add-shortcut", "add-text", "add-wait"]) $(id).disabled = draftSteps.length >= MAX_STEPS;
+  updateSequenceStatus();
+}
+
+function updateSequenceStatus() {
+  const invalid = draftSteps.some(step => step.kind === "text" && !step.text);
+  $("sequence-save").disabled = invalid;
+  $("sequence-status").textContent = invalid ? "空の文字入力があります。文字を入れるか削除してください。" : "";
+}
+
+function addStep(step) {
+  if (draftSteps.length >= MAX_STEPS) return;
+  draftSteps.push(step);
+  selectedStep = step.kind === "shortcut" ? -1 : draftSteps.length - 1;
+  renderSequence();
+}
+
+function saveSequence() {
+  sequenceBinding.steps = draftSteps;
+  if (!canHold(draftSteps)) sequenceBinding.mode = "tap";
+  $("sequence-editor").close();
   renderBindings();
   saveSettings();
 }
@@ -400,7 +507,12 @@ $("show-main").onclick = () => showView("main");
 $("show-settings").onclick = () => showView("settings");
 $("key-search").oninput = renderPicker;
 $("picker-close").onclick = () => $("key-picker").close();
-$("key-clear").onclick = () => { pickerKeys = []; commitPicker(); };
+$("key-clear").onclick = () => { pickerKeys = []; renderPicker(); };
+$("add-shortcut").onclick = () => openPicker("", keys => addStep({ kind: "shortcut", keys }));
+$("add-text").onclick = () => addStep({ kind: "text", text: "" });
+$("add-wait").onclick = () => addStep({ kind: "wait", ms: 500 });
+$("sequence-cancel").onclick = () => $("sequence-editor").close();
+$("sequence-save").onclick = saveSequence;
 $("key-done").onclick = commitPicker;
 $("save").onclick = saveSettings;
 $("swap-hands").onchange = () => {
@@ -459,7 +571,7 @@ window.chrome.webview.addEventListener("message", event => {
   paused = data.paused;
   $("pause").textContent = paused ? "認識を再開" : "認識を一時停止";
   $("held-keys").textContent = data.held.length ?
-    data.held.map(id => settings.bindings.find(binding => binding.gesture === id)?.keys).join(" / ") : "なし";
+    data.held.map(id => settings.bindings.find(binding => binding.gesture === id)?.steps[0]?.keys).join(" / ") : "なし";
   $("last-output").textContent = data.lastOutput ?? "なし";
   $("key-state").textContent = data.held.length ? "長押し中" : paused ? "一時停止" : "入力待ち";
   $("key-state").classList.toggle("down", data.held.length > 0);

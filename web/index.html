@@ -69,11 +69,24 @@
   </div>
 
   <dialog id="key-picker">
-    <div class="dialog-heading"><h2>キーを選択</h2><button id="picker-close" type="button" class="secondary">閉じる</button></div>
+    <div class="dialog-heading"><h2>ショートカットを選択</h2><button id="picker-close" type="button" class="secondary">閉じる</button></div>
     <input id="key-search" type="search" placeholder="キーを検索（例: F13、エンター）" aria-label="キーを検索">
     <p id="selected-keys" class="selected-keys">未選択</p>
     <div id="key-options" class="key-options"></div>
-    <div class="dialog-actions"><button id="key-clear" type="button" class="secondary">割り当てを解除</button><button id="key-done" type="button">割り当てて保存</button></div>
+    <div class="dialog-actions"><button id="key-clear" type="button" class="secondary">選択をクリア</button><button id="key-done" type="button">このキーにする</button></div>
+  </dialog>
+
+  <dialog id="sequence-editor">
+    <div class="dialog-heading"><h2 id="sequence-title">操作</h2><span id="sequence-count" class="muted"></span></div>
+    <p class="sequence-help">上から順に実行します。ショートカット1つだけなら長押しも選べます。文字入力は日本語もそのまま入ります。</p>
+    <ol id="sequence-steps" class="sequence-steps"></ol>
+    <div class="sequence-add">
+      <button id="add-shortcut" type="button" class="secondary">＋ ショートカット</button>
+      <button id="add-text" type="button" class="secondary">＋ 文字入力</button>
+      <button id="add-wait" type="button" class="secondary">＋ 待機</button>
+    </div>
+    <p id="sequence-status" class="save-status error" role="status"></p>
+    <div class="dialog-actions"><button id="sequence-cancel" type="button" class="secondary">キャンセル</button><button id="sequence-save" type="button">保存</button></div>
   </dialog>
   <script type="module" src="./app.js"></script>
 </body>

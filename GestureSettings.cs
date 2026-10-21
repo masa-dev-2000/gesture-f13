@@ -1,21 +1,36 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace GestureF13;
+
+// One step of a sequence: "shortcut" (Keys), "text" (Text) or "wait" (Ms).
+public sealed class GestureStep
+{
+    public string Kind { get; set; } = "shortcut";
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Keys { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Text { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? Ms { get; set; }
+}
 
 public sealed class GestureBinding
 {
     public string Gesture { get; set; } = "";
-    public string Keys { get; set; } = "";
+    // v3 stored a single shortcut here; v4 moves it into Steps.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Keys { get; set; }
+    public List<GestureStep> Steps { get; set; } = [];
     public string Mode { get; set; } = "tap";
     // Face expressions only: how long the expression must be held before input.
     public int HoldMs { get; set; } = 400;
     // Face expressions only: score needed to react. Lower reacts more easily.
     public double Threshold { get; set; } = 0.6;
+
+    // Holding is only meaningful when the sequence is exactly one shortcut.
+    public bool CanHold => Steps.Count == 1 && Steps[0].Kind == "shortcut";
 }
 
 public sealed class GestureSettings
 {
-    public int Version { get; set; } = 3;
+    public int Version { get; set; } = 4;
     public bool SwapHands { get; set; } = true;
     public bool FaceEnabled { get; set; }
     // Nose offset (-0.4..0.4) that counts as facing front when the camera is off-center.
@@ -46,7 +61,6 @@ public sealed class GestureSettings
     private static List<GestureBinding> Defaults() => GestureIds.Select(id => new GestureBinding
     {
         Gesture = id,
-        Keys = "",
         Mode = "tap"
     }).ToList();
 
@@ -67,21 +81,39 @@ public sealed class GestureSettings
         if (version is 1 or 2)
         {
             bool swapHands = document.RootElement.GetProperty("swapHands").GetBoolean();
-            string backupDirectory = Path.GetDirectoryName(SettingsPath)!;
-            Directory.CreateDirectory(backupDirectory);
-            string backup = Path.Combine(backupDirectory,
-                $"settings.v{version}.backup.{DateTime.UtcNow:yyyyMMddHHmmssfff}.json");
-            File.Copy(path, backup);
+            Backup(path, version);
             var migrated = new GestureSettings { SwapHands = swapHands };
             migrated.Save();
             return migrated;
         }
         var settings = JsonSerializer.Deserialize<GestureSettings>(json, JsonOptions)
             ?? throw new InvalidDataException("設定ファイルを読み込めませんでした。");
+        bool upgraded = false;
+        if (version == 3)
+        {
+            Backup(path, version);
+            foreach (var binding in settings.Bindings ?? [])
+            {
+                if (binding is null) continue;
+                binding.Steps = string.IsNullOrEmpty(binding.Keys) ? [] :
+                    [new GestureStep { Kind = "shortcut", Keys = binding.Keys }];
+                binding.Keys = null;
+            }
+            settings.Version = 4;
+            upgraded = true;
+        }
         bool added = settings.AddMissingBindings();
         settings.Validate();
-        if (path != SettingsPath || added) settings.Save();
+        if (path != SettingsPath || added || upgraded) settings.Save();
         return settings;
+    }
+
+    private static void Backup(string path, int version)
+    {
+        string backupDirectory = Path.GetDirectoryName(SettingsPath)!;
+        Directory.CreateDirectory(backupDirectory);
+        File.Copy(path, Path.Combine(backupDirectory,
+            $"settings.v{version}.backup.{DateTime.UtcNow:yyyyMMddHHmmssfff}.json"));
     }
 
     public static GestureSettings Parse(JsonElement element)
@@ -105,7 +137,7 @@ public sealed class GestureSettings
 
     public void Validate()
     {
-        if (Version != 3 || Bindings is null || Bindings.Count != GestureIds.Length ||
+        if (Version != 4 || Bindings is null || Bindings.Count != GestureIds.Length ||
             Bindings.Any(b => b is null) ||
             Bindings.Select(b => b.Gesture).Distinct(StringComparer.Ordinal).Count() != GestureIds.Length ||
             !GestureIds.All(id => Bindings.Any(b => b.Gesture == id)))
@@ -120,7 +152,30 @@ public sealed class GestureSettings
                 throw new InvalidDataException($"{binding.Gesture} の入力までの秒数が正しくありません。");
             if (binding.Threshold is < 0.01 or > 1)
                 throw new InvalidDataException($"{binding.Gesture} の反応しやすさが正しくありません。");
-            ShortcutKeys.Parse(binding.Keys);
+            if (binding.Steps is null || binding.Steps.Count > 50 || binding.Steps.Any(s => s is null))
+                throw new InvalidDataException($"{binding.Gesture} の手順が正しくありません（最大50手順）。");
+            if (binding.Mode == "hold" && !binding.CanHold)
+                throw new InvalidDataException($"{binding.Gesture} の長押しは、手順がショートカット1つのときだけ使えます。");
+            foreach (var step in binding.Steps)
+            {
+                switch (step.Kind)
+                {
+                    case "shortcut":
+                        if (ShortcutKeys.Parse(step.Keys).Length == 0)
+                            throw new InvalidDataException($"{binding.Gesture} のショートカットが空です。");
+                        break;
+                    case "text":
+                        if (string.IsNullOrEmpty(step.Text) || step.Text.Length > 1000)
+                            throw new InvalidDataException($"{binding.Gesture} の文字入力は1〜1000文字です。");
+                        break;
+                    case "wait":
+                        if (step.Ms is not (>= 0 and <= 10000))
+                            throw new InvalidDataException($"{binding.Gesture} の待機は0〜10秒です。");
+                        break;
+                    default:
+                        throw new InvalidDataException($"{binding.Gesture} の手順の種類が正しくありません。");
+                }
+            }
         }
     }
 
