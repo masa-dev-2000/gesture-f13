@@ -52,9 +52,10 @@ export class HeadDirection {
     this.pitchBaseline ??= pitch;
     if (settle) this.pitchBaseline += (pitch - this.pitchBaseline) * 0.02;
     const tilt = pitch - this.pitchBaseline;
+    // Full score needs a large head movement so high resistance values stay meaningful.
     return {
-      headLeft: clamp01(-yaw / 0.2), headRight: clamp01(yaw / 0.2),
-      headUp: clamp01(-tilt / 0.12), headDown: clamp01(tilt / 0.12)
+      headLeft: clamp01(-yaw / 0.45), headRight: clamp01(yaw / 0.45),
+      headUp: clamp01(-tilt / 0.3), headDown: clamp01(tilt / 0.3)
     };
   }
 }
