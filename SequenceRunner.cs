@@ -7,6 +7,7 @@ internal sealed class SequenceRunner(ShortcutOutput output, Action<string> repor
 {
     private static readonly TimeSpan MaxDuration = TimeSpan.FromSeconds(30);
     private readonly Dictionary<string, CancellationTokenSource> running = new();
+    private readonly HashSet<CancellationTokenSource> silenced = new();
 
     public bool IsRunning(string id) => running.ContainsKey(id);
 
@@ -20,7 +21,12 @@ internal sealed class SequenceRunner(ShortcutOutput output, Action<string> repor
 
     public void CancelAll()
     {
-        foreach (var cancel in running.Values) cancel.Cancel();
+        // The caller reports its own reason, so these runs stop quietly.
+        foreach (var cancel in running.Values)
+        {
+            silenced.Add(cancel);
+            cancel.Cancel();
+        }
     }
 
     private async Task RunAsync(string id, GestureStep[] steps, CancellationTokenSource cancel)
@@ -30,6 +36,12 @@ internal sealed class SequenceRunner(ShortcutOutput output, Action<string> repor
             foreach (var step in steps)
             {
                 cancel.Token.ThrowIfCancellationRequested();
+                // Keys held by another gesture (e.g. Ctrl) would combine with typed text or shortcuts.
+                if (step.Kind != "wait" && output.IsHolding)
+                {
+                    report($"{id} の連続操作を中止しました（長押し中のキーがあるため）。");
+                    return;
+                }
                 switch (step.Kind)
                 {
                     case "shortcut": output.Tap(ShortcutKeys.Parse(step.Keys)); break;
@@ -40,7 +52,7 @@ internal sealed class SequenceRunner(ShortcutOutput output, Action<string> repor
         }
         catch (OperationCanceledException)
         {
-            report($"{id} の連続操作を中止しました。");
+            if (!silenced.Contains(cancel)) report($"{id} の連続操作を時間切れで中止しました。");
         }
         catch (Exception ex)
         {
@@ -49,6 +61,7 @@ internal sealed class SequenceRunner(ShortcutOutput output, Action<string> repor
         finally
         {
             running.Remove(id);
+            silenced.Remove(cancel);
             cancel.Dispose();
         }
     }

@@ -132,6 +132,7 @@ internal sealed class ShortcutOutput
 
     public string[] HeldNames => owners.Keys.OrderBy(x => x).ToArray();
     public bool HasDown => physicallyDown.Count > 0;
+    public bool IsHolding => owners.Count > 0;
 
     public void SetHold(string owner, ushort[] keys, bool desired)
     {

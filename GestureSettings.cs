@@ -91,19 +91,22 @@ public sealed class GestureSettings
         bool upgraded = false;
         if (version == 3)
         {
-            Backup(path, version);
             foreach (var binding in settings.Bindings ?? [])
             {
                 if (binding is null) continue;
                 binding.Steps = string.IsNullOrEmpty(binding.Keys) ? [] :
                     [new GestureStep { Kind = "shortcut", Keys = binding.Keys }];
                 binding.Keys = null;
+                // v3 allowed hold with empty keys; only a single shortcut can still be held.
+                if (!binding.CanHold) binding.Mode = "tap";
             }
             settings.Version = 4;
             upgraded = true;
         }
         bool added = settings.AddMissingBindings();
         settings.Validate();
+        // Back up only once the upgrade is known to succeed, so a bad file is not copied on every launch.
+        if (upgraded) Backup(path, version);
         if (path != SettingsPath || added || upgraded) settings.Save();
         return settings;
     }

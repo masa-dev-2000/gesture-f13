@@ -311,7 +311,7 @@ function bindingRow(id, pose, owner) {
   mode.innerHTML = '<option value="tap">認識した時に1回押し</option><option value="hold">認識中は長押し</option>';
   mode.value = binding.mode;
   if (!canHold(binding.steps)) {
-    mode.value = "tap";
+    binding.mode = mode.value = "tap";
     mode.disabled = true;
     mode.title = "長押しは、手順がショートカット1つのときだけ選べます";
   }
