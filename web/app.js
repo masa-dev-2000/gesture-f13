@@ -64,7 +64,7 @@ function resetRecognition() {
   $("face-pose").textContent = settings?.faceEnabled ? "検出なし" : "オフ";
   $("left-pose").textContent = "検出なし";
   $("right-pose").textContent = "検出なし";
-  $("hands").textContent = "手を検出していません";
+  $("hands").textContent = "手と顔を検出していません";
   updateSettingsHighlights(previousActive);
 }
 
@@ -116,7 +116,7 @@ async function startCamera() {
     lastFrameAt = performance.now();
     send("cameraStarted");
     $("camera-state").textContent = "認識中";
-    announce("カメラで手の形を認識しています。");
+    announce(settings.faceEnabled ? "カメラで手の形と顔の表情を認識しています。" : "カメラで手の形を認識しています。");
     setTimeout(() => processFrame(startId), 0);
   } catch (error) {
     stopCamera();
