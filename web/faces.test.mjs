@@ -73,9 +73,9 @@ test('head direction scores follow the nose position', () => {
   const points = nx => Object.assign([], { 1: { x: nx, y: .5 }, 234: { x: .3, y: .5 }, 454: { x: .7, y: .5 },
     152: { x: .5, y: .8 }, 33: { x: .4, y: .4 }, 263: { x: .6, y: .4 } });
   assert.equal(head.scores(points(.5), true).headLeft, 0);
-  assert.ok(head.scores(points(.38), false).headLeft < .5);
-  assert.ok(head.scores(points(.13), false).headLeft > .9);
-  assert.ok(head.scores(points(.87), false).headRight > .9);
+  assert.ok(head.scores(points(.45), false).headLeft < .5);
+  assert.ok(head.scores(points(.32), false).headLeft > .9);
+  assert.ok(head.scores(points(.68), false).headRight > .9);
 });
 
 test('resistance levels map to thresholds and back', async () => {
